@@ -1,22 +1,25 @@
-/*********
- * 
+/*
  * smartAlarm
  * Controlling an alarm clock based on ESP32
  * 
-*********/
+ */
 
 #include <WiFi.h>
 #include <SPIFFS.h>
 #include <ArduinoJson.h>
+#include <time.h>
 
 // File system definitions
 #define FORMAT_SPIFFS_IF_FAILED true
 #define JSON_MEMORY 500 //bytes
 
-// define config structure for online calibration
+// define configuration structure type
 struct config {
   String wifiSSID;
   String wifiPassword;
+  String NtpServerUrl;
+  int NtpGmtOffset;
+  int NtpDaylightSavingTime;
 };
 
 // define configuration object
@@ -29,17 +32,19 @@ boolean bParamFileLocked = false;
 // WifiConnectionStatus
 boolean bEspOnline = false;
 
+// timestamp object
+struct tm objTimeInfo;
+
 
 bool connectWiFi(const int i_total_fail, const int i_timout_attemp_millis){
   /**
-   * Try to connect to WiFi Accesspoint based on the given information in the header file WiFiAccess.h.
+   * @brief Try to connect to WiFi Accesspoint based on the given information in the header file WiFiAccess.h.
    * A defined number of connection is performed.
-   * @param 
-   *    i_total_fail:     Total amount of connection attemps
-   *    i_timout_attemp_millis:             Waiting time between connection attemps
    * 
-   * @return 
-   *    b_status:         true if connection is successfull
+   * @param i_total_fail            Total amount of connection attemps
+   * @param i_timout_attemp_millis  Waiting time between connection attemps
+   * 
+   * @return true if connection is successfull
    */
   
   bool b_successful = false;
@@ -70,7 +75,7 @@ bool connectWiFi(const int i_total_fail, const int i_timout_attemp_millis){
   }
 
   if (i_wifi_status == WL_CONNECTED) {
-      // Print ESP32 Local IP Address
+      // Print local IP Address
       Serial.print("Connection successful. Local IP: ");
       Serial.println(WiFi.localIP());
       // Signal strength and approximate conversion to percentage
@@ -97,21 +102,24 @@ bool connectWiFi(const int i_total_fail, const int i_timout_attemp_millis){
   return b_successful;
 } // connectWiFi
 
-void reconnectWiFi(WiFiEvent_t event, WiFiEventInfo_t info){
+
+void reconnectWiFi(WiFiEvent_t obj_event, WiFiEventInfo_t obj_event_info){
   /**
-   * Try to reconnect to WiFi when disconnected from network
+   * @brief Try to reconnect to WiFi when disconnected from network
+   * @param obj_event       WiFi event type object
+   * @param obj_event_info  WiFi event info
    */
-    
+     
   Serial.println("Disconnected from WiFi access point");
   Serial.print("WiFi lost connection. Reason: ");
-  Serial.println(info.disconnected.reason);
+  Serial.println(obj_event_info.disconnected.reason);
   Serial.println("Trying to Reconnect");
   connectWiFi(3, 1000);
 } // reconnectWiFi
 
 bool loadConfiguration(){
   /**
-   * Load configuration from configuration file 
+   * @brief Load configuration from JSON configuration file
    */
   
   bool b_success = false;
@@ -143,17 +151,21 @@ bool loadConfiguration(){
       bParamFileLocked = false;
       objConfig.wifiSSID = json_doc["wifi"]["SSID"].as<String>(); // issue #118 in ArduinoJson
       objConfig.wifiPassword = json_doc["wifi"]["Password"].as<String>(); // issue #118 in ArduinoJson
+      objConfig.NtpServerUrl = json_doc["ntp"]["ServerUrl"].as<String>(); // issue #118 in ArduinoJson
+      objConfig.NtpGmtOffset = json_doc["ntp"]["GmtOffset"];
+      objConfig.NtpDaylightSavingTime = json_doc["ntp"]["DaylightSavingTime"];
   }
     b_success = true;
   } else {
     b_success = false;
   }
   return b_success;
-}
+} // loadConfiguration
+
 
 bool saveConfiguration(){
   /**
-   * Save configuration to configuration file 
+   * @brief Save configuration to configuration file 
    */
   
   bool b_success = false;
@@ -161,6 +173,9 @@ bool saveConfiguration(){
 
   json_doc["wifi"]["SSID"] = objConfig.wifiSSID;
   json_doc["wifi"]["SSID"] = objConfig.wifiPassword;
+  json_doc["ntp"]["ServerUrl"] = objConfig.NtpServerUrl;
+  json_doc["ntp"]["GmtOffset"] = objConfig.NtpGmtOffset;
+  json_doc["ntp"]["DaylightSavingTime"] = objConfig.NtpDaylightSavingTime;  
 
   if (!bParamFileLocked){
     bParamFileLocked = true;
@@ -179,22 +194,60 @@ bool saveConfiguration(){
     b_success = false;
   }
   return b_success;
-}
+} // saveConfiguration
 
 void resetConfiguration(boolean b_safe_to_json){
   /**
-   * init configuration to configuration file 
-   * 
+   * @brief init configuration to configuration file 
    * @param b_safe_to_json: Safe initial configuration to json file
    */
   
   objConfig.wifiSSID = "";
   objConfig.wifiPassword = "";
+  objConfig.NtpServerUrl = "";
+  objConfig.NtpGmtOffset = 0;
+  objConfig.NtpDaylightSavingTime = 0;
   
   if (b_safe_to_json){
     saveConfiguration();
   }
-}
+} // resetConfiguration
+
+
+bool connectNTP(){
+  /**
+   * @brief Connect to NTP server and set up time object
+   * @return true if connection to NTP server was successful
+   */
+  
+  char char_timestamp[50];
+  bool b_success = false;
+
+  // config time library and setup NTP settings
+  Serial.println("Setting up NTP client:");
+  Serial.print("Local GMT: ");
+  Serial.print(objConfig.NtpGmtOffset);
+  Serial.print(" s; Daylight saving time: ");
+  Serial.print(objConfig.NtpDaylightSavingTime);
+  Serial.print(" s; NTP server address: ");
+  Serial.println(objConfig.NtpServerUrl.c_str());
+
+  configTime(objConfig.NtpGmtOffset, objConfig.NtpDaylightSavingTime, objConfig.NtpServerUrl.c_str());
+
+  // get local time
+  if(!getLocalTime(&objTimeInfo)){
+    Serial.println("Failed to obtain time stamp online");
+  } else {
+    b_success = true;
+    Serial.print("NTP setup successfull. Local time is now: ");
+    // write time stamp into variable
+    strftime(char_timestamp, sizeof(char_timestamp), "%c", &objTimeInfo);
+    Serial.println(char_timestamp);
+  }
+  
+  return b_success;
+} // connectNTP
+
 
 void setup(){
   /**
@@ -228,6 +281,9 @@ void setup(){
 
         // Define reconnect action when disconnecting from Wifi
         WiFi.onEvent(reconnectWiFi, SYSTEM_EVENT_STA_DISCONNECTED);
+
+        // configure NTP server and get actual time
+        connectNTP();
       } 
       
     } else {
@@ -240,19 +296,21 @@ void setup(){
     unsigned int i_total_bytes = SPIFFS.totalBytes();
     unsigned int i_used_bytes = SPIFFS.usedBytes();
     
+    Serial.println("");
     Serial.println("File system info:");
-    Serial.print("   Total space on SPIFFS: ");
+    Serial.print("Total space on SPIFFS: ");
     Serial.print(i_total_bytes);
     Serial.println(" bytes");
 
-    Serial.print("   Total space used on SPIFFS: ");
+    Serial.print("Total space used on SPIFFS: ");
     Serial.print(i_used_bytes);
     Serial.println(" bytes");
     Serial.println("");
   }
-}
+} // setup
+
 
 void loop()
 {
 	
-}
+} // loop
