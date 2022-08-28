@@ -32,25 +32,28 @@ boolean bParamFileLocked = false;
 // WifiConnectionStatus
 boolean bEspOnline = false;
 
+// global variabel for WiFi strength
+int iDbmPercentage = 0;
+
 // timestamp object
 struct tm objTimeInfo;
 
-
-bool connectWiFi(const int i_total_fail, const int i_timout_attemp_millis){
+bool connectWiFi(const int i_total_fail = 3, const int i_timout_attemp = 1000){
   /**
-   * @brief Try to connect to WiFi Accesspoint based on the given information in the header file WiFiAccess.h.
+   * Try to connect to WiFi Accesspoint based on the given information in the header file WiFiAccess.h.
    * A defined number of connection is performed.
+   * @param 
+   *    i_timout_attemp:     Total amount of connection attemps
+   *    i_waiting_time:   Waiting time between connection attemps
    * 
-   * @param i_total_fail            Total amount of connection attemps
-   * @param i_timout_attemp_millis  Waiting time between connection attemps
-   * 
-   * @return true if connection is successfull
+   * @return 
+   *    b_status:         true if connection is successfull
    */
   
   bool b_successful = false;
   
-  WiFi.disconnect(true);
-  delay(100);
+  //WiFi.disconnect(true);
+  //delay(100);
 
   Serial.print("Device ");
   Serial.print(WiFi.macAddress());
@@ -60,38 +63,41 @@ bool connectWiFi(const int i_total_fail, const int i_timout_attemp_millis){
   delay(100);
 
   int i_run_cnt_fail = 0;
-  int i_wifi_status = WL_IDLE_STATUS;
+  int i_wifi_status;
 
   WiFi.mode(WIFI_STA);
 
   // Connect to WPA/WPA2 network:
   WiFi.begin(objConfig.wifiSSID.c_str(), objConfig.wifiPassword.c_str());
+  i_wifi_status = WiFi.status();
 
   while ((i_wifi_status != WL_CONNECTED) && (i_run_cnt_fail<i_total_fail)) {
     // wait for connection establish
-    delay(i_timout_attemp_millis);
+    delay(i_timout_attemp);
     i_run_cnt_fail++;
     i_wifi_status = WiFi.status();
+    Serial.print("Connection Attemp: ");
+    Serial.println(i_run_cnt_fail);
   }
 
   if (i_wifi_status == WL_CONNECTED) {
-      // Print local IP Address
+      // Print ESP32 Local IP Address
       Serial.print("Connection successful. Local IP: ");
       Serial.println(WiFi.localIP());
       // Signal strength and approximate conversion to percentage
       int i_dBm = WiFi.RSSI();
-      int i_dBm_percentage = 0;
-      if (i_dBm>=-50) {
-        i_dBm_percentage = 100;
+      calcWifiStrength(i_dBm);
+      /*if (i_dBm>=-50) {
+        iDbmPercentage = 100;
       } else if (i_dBm<=-100) {
-        i_dBm_percentage = 0;
+        iDbmPercentage = 0;
       } else {
-        i_dBm_percentage = 2*(i_dBm+100);
-      }
+        iDbmPercentage = 2*(i_dBm+100);
+      }*/
       Serial.print("Signal Strength: ");
       Serial.print(i_dBm);
       Serial.print(" dB -> ");
-      Serial.print(i_dBm_percentage);
+      Serial.print(iDbmPercentage);
       Serial.println(" %");
       b_successful = true;
   } else {
@@ -102,20 +108,31 @@ bool connectWiFi(const int i_total_fail, const int i_timout_attemp_millis){
   return b_successful;
 } // connectWiFi
 
-
-void reconnectWiFi(WiFiEvent_t obj_event, WiFiEventInfo_t obj_event_info){
+void reconnectWiFi(WiFiEvent_t event, WiFiEventInfo_t info){
   /**
-   * @brief Try to reconnect to WiFi when disconnected from network
-   * @param obj_event       WiFi event type object
-   * @param obj_event_info  WiFi event info
+   * Try to reconnect to WiFi when disconnected from network
    */
-     
+    
   Serial.println("Disconnected from WiFi access point");
   Serial.print("WiFi lost connection. Reason: ");
-  Serial.println(obj_event_info.disconnected.reason);
+  Serial.println(info.wifi_sta_disconnected.reason);
   Serial.println("Trying to Reconnect");
   connectWiFi(3, 1000);
 } // reconnectWiFi
+
+void calcWifiStrength(int i_dBm){
+  /**
+   * calculate the wifi strength from dB to % 
+   */
+  iDbmPercentage = 0;
+  if (i_dBm>=-50) {
+    iDbmPercentage = 100;
+  } else if (i_dBm<=-100) {
+    iDbmPercentage = 0;
+  } else {
+    iDbmPercentage = 2*(i_dBm+100);
+  }
+}//getWifiStreng
 
 bool loadConfiguration(){
   /**
@@ -280,7 +297,7 @@ void setup(){
         // ESP has wifi connection
 
         // Define reconnect action when disconnecting from Wifi
-        WiFi.onEvent(reconnectWiFi, SYSTEM_EVENT_STA_DISCONNECTED);
+        // WiFi.onEvent(reconnectWiFi, SYSTEM_EVENT_STA_DISCONNECTED);
 
         // configure NTP server and get actual time
         connectNTP();
