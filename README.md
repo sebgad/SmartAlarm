@@ -1,7 +1,7 @@
 # SmartAlarm
 Alarm for ESP32 device
 
-### required aduino libaries:
+### required arduino libaries:
 - for WiFi connection [WiFi](https://www.arduino.cc/en/Reference/WiFi)
 - for Json handling [ArduinoJson](https://arduinojson.org/)
 - for LittleFS file partition (https://github.com/espressif/arduino-esp32/tree/master/libraries/LittleFS)
