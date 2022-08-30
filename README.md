@@ -3,12 +3,12 @@ Alarm for ESP32 device
 
 ### required aduino libaries:
 - for WiFi connection [WiFi](https://www.arduino.cc/en/Reference/WiFi)
-- for SPIFFS filesystem [SPIFFS](https://github.com/espressif/arduino-esp32/tree/master/libraries/SPIFFS)
 - for Json handling [ArduinoJson](https://arduinojson.org/)
+- for LittleFS file partition (https://github.com/espressif/arduino-esp32/tree/master/libraries/LittleFS)
 - for ntp functionality [time](https://github.com/espressif/arduino-esp32/tree/master/libraries)
 
 ### required Addons for Arduino IDE:
-- SPIFFS data upload [SPIFFS-Data-upload](https://randomnerdtutorials.com/install-esp32-filesystem-uploader-arduino-ide/)
+- File system data upload tool [Data-upload](https://github.com/me-no-dev/arduino-esp32fs-plugin)
 
 In addition there is one file required for storing the configuration. It needs to be stored under ./data/configuration.json. Please see the following example:
 
