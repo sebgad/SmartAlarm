@@ -5,12 +5,12 @@
  */
 
 #include <WiFi.h>
-#include <SPIFFS.h>
 #include <ArduinoJson.h>
 #include <time.h>
+#include <LittleFS.h>
 
 // File system definitions
-#define FORMAT_SPIFFS_IF_FAILED true
+#define FORMAT_LittleFS_IF_FAILED true
 #define JSON_MEMORY 500 //bytes
 
 // define configuration structure type
@@ -28,6 +28,9 @@ config objConfig;
 // config file location
 const char* strParamFilePath = "/configuration.json";
 boolean bParamFileLocked = false;
+
+// measurement file location
+const char* strMeasFilePath = "/data.csv";
 
 // WifiConnectionStatus
 boolean bEspOnline = false;
@@ -52,9 +55,6 @@ bool connectWiFi(const int i_total_fail = 3, const int i_timout_attemp = 1000){
   
   bool b_successful = false;
   
-  //WiFi.disconnect(true);
-  //delay(100);
-
   Serial.print("Device ");
   Serial.print(WiFi.macAddress());
 
@@ -81,28 +81,25 @@ bool connectWiFi(const int i_total_fail = 3, const int i_timout_attemp = 1000){
   }
 
   if (i_wifi_status == WL_CONNECTED) {
-      // Print ESP32 Local IP Address
-      Serial.print("Connection successful. Local IP: ");
-      Serial.println(WiFi.localIP());
-      // Signal strength and approximate conversion to percentage
-      int i_dBm = WiFi.RSSI();
-      calcWifiStrength(i_dBm);
-      /*if (i_dBm>=-50) {
-        iDbmPercentage = 100;
-      } else if (i_dBm<=-100) {
-        iDbmPercentage = 0;
-      } else {
-        iDbmPercentage = 2*(i_dBm+100);
-      }*/
-      Serial.print("Signal Strength: ");
-      Serial.print(i_dBm);
-      Serial.print(" dB -> ");
-      Serial.print(iDbmPercentage);
-      Serial.println(" %");
-      b_successful = true;
+    // Print ESP32 Local IP Address
+    Serial.print("Connection successful. Local IP: ");
+    Serial.println(WiFi.localIP());
+    
+    // Signal strength and approximate conversion to percentage
+    int i_dBm = WiFi.RSSI();
+    calcWifiStrength(i_dBm);
+    Serial.print("Signal Strength: ");
+    Serial.print(i_dBm);
+    Serial.print(" dB -> ");
+    Serial.print(iDbmPercentage);
+    Serial.println(" %");
+    b_successful = true;
   } else {
+    // Wifi connection not possible, create Soft AP
     Serial.print("Connection unsuccessful. WiFi status: ");
     Serial.println(i_wifi_status);
+    Serial.print("Make Soft-AP with SSID 'SmartAlarm'");
+    WiFi.softAP("SmartAlarm");
   }
   
   return b_successful;
@@ -132,7 +129,7 @@ void calcWifiStrength(int i_dBm){
   } else {
     iDbmPercentage = 2*(i_dBm+100);
   }
-}//getWifiStreng
+}//getWifiStrength
 
 bool loadConfiguration(){
   /**
@@ -144,7 +141,7 @@ bool loadConfiguration(){
   if (!bParamFileLocked){
     // file is not locked by another process ->  save to read or write
     bParamFileLocked = true;
-    File obj_param_file = SPIFFS.open(strParamFilePath, "r");
+    File obj_param_file = LittleFS.open(strParamFilePath, "r");
     StaticJsonDocument<JSON_MEMORY> json_doc;
     DeserializationError error = deserializeJson(json_doc, obj_param_file);
 
@@ -196,12 +193,11 @@ bool saveConfiguration(){
 
   if (!bParamFileLocked){
     bParamFileLocked = true;
-    File obj_param_file = SPIFFS.open(strParamFilePath, "w");
+    File obj_param_file = LittleFS.open(strParamFilePath, "w");
   
     if (serializeJsonPretty(json_doc, obj_param_file) == 0) {
       Serial.println(F("Failed to write configuration to file"));
-    }
-    else{
+    } else {
       Serial.println("configuration file updated successfully");
       b_success = true;
     }
@@ -276,14 +272,14 @@ void setup(){
   delay(50);
   Serial.println("Starting setup.");
 
-  // Initialize SPIFFS
-  if(!SPIFFS.begin(FORMAT_SPIFFS_IF_FAILED)){
-    // Initialization of SPIFFS failed, restart it
-    Serial.println("SPIFFS mount Failed, restart ESP");
+  // Initialize LittleFS
+  if(!LittleFS.begin(FORMAT_LittleFS_IF_FAILED)){
+    // Initialization of LittleFS failed, restart it
+    Serial.println("LittleFS mount Failed, restart ESP");
     delay(1000);
     ESP.restart();
   } else {
-    Serial.println("SPIFFS mount successfully.");
+    Serial.println("LittleFS mount successfully.");
     // initialize configuration before load json file
     resetConfiguration(false);
 
@@ -296,30 +292,26 @@ void setup(){
       if (bEspOnline == true) {
         // ESP has wifi connection
 
-        // Define reconnect action when disconnecting from Wifi
-        // WiFi.onEvent(reconnectWiFi, SYSTEM_EVENT_STA_DISCONNECTED);
-
         // configure NTP server and get actual time
         connectNTP();
       } 
       
     } else {
         // load configuration unsuccessful
-        // #TODO: Define further actions / diagnosis
         Serial.println("Parameter file is locked on startup. Please reset to factory settings.");
     }
     
     // Initialization successful
-    unsigned int i_total_bytes = SPIFFS.totalBytes();
-    unsigned int i_used_bytes = SPIFFS.usedBytes();
+    unsigned int i_total_bytes = LittleFS.totalBytes();
+    unsigned int i_used_bytes = LittleFS.usedBytes();
     
     Serial.println("");
     Serial.println("File system info:");
-    Serial.print("Total space on SPIFFS: ");
+    Serial.print("Total space on LittleFS: ");
     Serial.print(i_total_bytes);
     Serial.println(" bytes");
 
-    Serial.print("Total space used on SPIFFS: ");
+    Serial.print("Total space used on LittleFS: ");
     Serial.print(i_used_bytes);
     Serial.println(" bytes");
     Serial.println("");
