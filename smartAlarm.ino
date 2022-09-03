@@ -12,6 +12,7 @@
 // File system definitions
 #define FORMAT_LittleFS_IF_FAILED true
 #define JSON_MEMORY 500 //bytes
+#define TIME_STMP_SIZE 50
 
 // define configuration structure type
 struct config {
@@ -40,6 +41,7 @@ int iDbmPercentage = 0;
 
 // timestamp object
 struct tm objTimeInfo;
+char strTimeInfo[TIME_STMP_SIZE];
 
 bool connectWiFi(const int i_total_fail = 3, const int i_timout_attemp = 1000){
   /**
@@ -261,6 +263,19 @@ bool connectNTP(){
   return b_success;
 } // connectNTP
 
+void getLatestTimeInfo(char * ptr_time_info, size_t i_time_info_size) {
+ /**
+  * @brief Update timestamp and return latest time info
+  * 
+  */
+  
+  if(!getLocalTime(&objTimeInfo)){
+    Serial.println("Failed to obtain time stamp online");
+  } else {
+    strftime(ptr_time_info, i_time_info_size, "%y/%m/%d %H:%M:%S", &objTimeInfo);
+  }
+}
+
 
 void setup(){
   /**
@@ -287,7 +302,7 @@ void setup(){
       // load configuration from file in eeprom
       
       // Connect to wifi when configuration can be loaded succesfully
-      bEspOnline = connectWiFi(3, 1000);
+      bEspOnline = connectWiFi(5, 2000);
 
       if (bEspOnline == true) {
         // ESP has wifi connection
@@ -315,11 +330,26 @@ void setup(){
     Serial.print(i_used_bytes);
     Serial.println(" bytes");
     Serial.println("");
+
+    if (!LittleFS.exists(strMeasFilePath)){
+      // Create measurement file if not exists
+      File obj_meas_file = LittleFS.open(strMeasFilePath, "w");
+      obj_meas_file.print("Measurement File created on ");
+      getLatestTimeInfo(strTimeInfo, TIME_STMP_SIZE);
+      obj_meas_file.println(strTimeInfo);
+      obj_meas_file.println("");
+      obj_meas_file.println("Time,Temperature,Airpressure");
+      obj_meas_file.close();
+    }
+
   }
 } // setup
 
 
 void loop()
 {
-	
+  // add some dummy print out to console
+  getLatestTimeInfo(strTimeInfo, TIME_STMP_SIZE);
+  Serial.println(strTimeInfo);
+  vTaskDelay(2000 / portTICK_PERIOD_MS);
 } // loop
